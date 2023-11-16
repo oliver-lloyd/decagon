@@ -121,6 +121,7 @@ gene_edgelist = pd.read_csv('data/bio-decagon-ppi.csv')
 gene_net = nx.from_pandas_edgelist(gene_edgelist, source='Gene 1', target='Gene 2')
 gene_adj = nx.adjacency_matrix(gene_net)
 gene_degrees = np.array(gene_adj.sum(axis=0)).squeeze()
+n_genes = len(gene_net.nodes)
 
 # Load drug-target data
 gene_drug_edgelist = pd.read_csv('data/bio-decagon-targets.csv')
@@ -132,6 +133,7 @@ drug_gene_adj = gene_drug_adj.transpose(copy=True)
 drug_drug_adj_list = []
 drug_drug_edgelist = pd.read_csv('data/bio-decagon-combo.csv')
 drugs_list = list(set(drug_drug_edgelist['STITCH 1']).union(set(drug_drug_edgelist['STITCH 2'])))
+n_drugs = len(drugs_list)
 for poly_SE, subdf in drug_drug_edgelist.groupby('Polypharmacy Side Effect'):
     all_drugs_net = nx.Graph()  # Add all drug nodes first in case some aren't present in particular side effect edges 
     all_drugs_net.add_nodes_from(drugs_list)
@@ -139,6 +141,8 @@ for poly_SE, subdf in drug_drug_edgelist.groupby('Polypharmacy Side Effect'):
     all_drugs_net.add_edges_from(SE_net.edges)
     all_drugs_adj = nx.adj_matrix(all_drugs_net)
     drug_drug_adj_list.append(all_drugs_adj)
+    if len(drug_drug_adj_list) > 5:
+        break
 drug_degrees_list = [np.array(drug_adj.sum(axis=0)).squeeze() for drug_adj in drug_drug_adj_list]
 
 
