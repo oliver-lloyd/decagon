@@ -9,6 +9,7 @@ import tensorflow as tf
 import numpy as np
 import networkx as nx
 import scipy.sparse as sp
+import pandas as pd
 from sklearn import metrics
 
 from decagon.deep.optimizer import DecagonOptimizer
@@ -114,25 +115,30 @@ def construct_placeholders(edge_types):
 ####
 
 val_test_size = 0.05
-n_genes = 500
-n_drugs = 400
-n_drugdrug_rel_types = 3
-gene_net = nx.planted_partition_graph(50, 10, 0.2, 0.05, seed=42)
 
+# Load PPI data
+gene_edgelist = pd.read_csv('data/bio-decagon-ppi.csv')
+gene_net = nx.from_pandas_edgelist(gene_edgelist, source='Gene 1', target='Gene 2')
 gene_adj = nx.adjacency_matrix(gene_net)
 gene_degrees = np.array(gene_adj.sum(axis=0)).squeeze()
 
-gene_drug_adj = sp.csr_matrix((10 * np.random.randn(n_genes, n_drugs) > 15).astype(int))
+# Load drug-target data
+gene_drug_edgelist = pd.read_csv('data/bio-decagon-targets.csv')
+gene_drug_net = nx.from_pandas_edgelist(gene_drug_edgelist, source='STITCH', target='Gene', create_using=nx.DiGraph())
+gene_drug_adj = nx.adjacency_matrix(gene_drug_net)
 drug_gene_adj = gene_drug_adj.transpose(copy=True)
 
+# Load polypharmacy side effect data
 drug_drug_adj_list = []
-tmp = np.dot(drug_gene_adj, gene_drug_adj)
-for i in range(n_drugdrug_rel_types):
-    mat = np.zeros((n_drugs, n_drugs))
-    for d1, d2 in combinations(list(range(n_drugs)), 2):
-        if tmp[d1, d2] == i + 4:
-            mat[d1, d2] = mat[d2, d1] = 1.
-    drug_drug_adj_list.append(sp.csr_matrix(mat))
+drug_drug_edgelist = pd.read_csv('data/bio-decagon-combo.csv')
+drugs_list = list(set(drug_drug_edgelist['STITCH 1']).union(set(drug_drug_edgelist['STITCH 2'])))
+for poly_SE, subdf in drug_drug_edgelist.groupby('Polypharmacy Side Effect'):
+    all_drugs_net = nx.Graph()  # Add all drug nodes first in case some aren't present in particular side effect edges 
+    all_drugs_net.add_nodes_from(drugs_list)
+    SE_net = nx.from_pandas_edgelist(subdf, source='STITCH 1', target='STITCH 2')
+    all_drugs_net.add_edges_from(SE_net.edges)
+    all_drugs_adj = nx.adj_matrix(all_drugs_net)
+    drug_drug_adj_list.append(all_drugs_adj)
 drug_degrees_list = [np.array(drug_adj.sum(axis=0)).squeeze() for drug_adj in drug_drug_adj_list]
 
 
