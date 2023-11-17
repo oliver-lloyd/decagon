@@ -18,13 +18,13 @@ from decagon.deep.minibatch import EdgeMinibatchIterator
 from decagon.utility import rank_metrics, preprocessing
 
 # Train on CPU (hide GPU) due to memory constraints
-os.environ['CUDA_VISIBLE_DEVICES'] = ""
+#os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
 # Train on GPU
-# os.environ["CUDA_DEVICE_ORDER"] = 'PCI_BUS_ID'
-# os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-# config = tf.ConfigProto()
-# config.gpu_options.allow_growth = True
+os.environ["CUDA_DEVICE_ORDER"] = 'PCI_BUS_ID'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
 
 np.random.seed(0)
 
@@ -121,13 +121,8 @@ gene_edgelist = pd.read_csv('data/bio-decagon-ppi.csv')
 gene_net = nx.from_pandas_edgelist(gene_edgelist, source='Gene 1', target='Gene 2')
 gene_adj = nx.adjacency_matrix(gene_net)
 gene_degrees = np.array(gene_adj.sum(axis=0)).squeeze()
-n_genes = len(gene_net.nodes)
-
-# Load drug-target data
-gene_drug_edgelist = pd.read_csv('data/bio-decagon-targets.csv')
-gene_drug_net = nx.from_pandas_edgelist(gene_drug_edgelist, source='STITCH', target='Gene', create_using=nx.DiGraph())
-gene_drug_adj = nx.adjacency_matrix(gene_drug_net)
-drug_gene_adj = gene_drug_adj.transpose(copy=True)
+genes_list = list(gene_net.nodes)
+n_genes = len(genes_list)
 
 # Load polypharmacy side effect data
 drug_drug_adj_list = []
@@ -135,7 +130,7 @@ drug_drug_edgelist = pd.read_csv('data/bio-decagon-combo.csv')
 drugs_list = list(set(drug_drug_edgelist['STITCH 1']).union(set(drug_drug_edgelist['STITCH 2'])))
 n_drugs = len(drugs_list)
 for poly_SE, subdf in drug_drug_edgelist.groupby('Polypharmacy Side Effect'):
-    all_drugs_net = nx.Graph()  # Add all drug nodes first in case some aren't present in particular side effect edges 
+    all_drugs_net = nx.Graph()  # Add all drug nodes first to keep equivalent adj matrices
     all_drugs_net.add_nodes_from(drugs_list)
     SE_net = nx.from_pandas_edgelist(subdf, source='STITCH 1', target='STITCH 2')
     all_drugs_net.add_edges_from(SE_net.edges)
@@ -144,6 +139,15 @@ for poly_SE, subdf in drug_drug_edgelist.groupby('Polypharmacy Side Effect'):
     if len(drug_drug_adj_list) > 5:
         break
 drug_degrees_list = [np.array(drug_adj.sum(axis=0)).squeeze() for drug_adj in drug_drug_adj_list]
+
+# Load drug-target data
+gene_drug_edgelist = pd.read_csv('data/bio-decagon-targets.csv')#.query('STITCH == @drugs_list').query('Gene == @genes_list')
+gene_drug_net = nx.Graph()
+gene_drug_net.add_nodes_from(drugs_list, bipartite=0)
+gene_drug_net.add_nodes_from(gene_net.nodes, bipartite=1)
+gene_drug_net.add_edges_from(gene_drug_edgelist.to_numpy())
+gene_drug_adj = nx.algorithms.bipartite.matrix.biadjacency_matrix(gene_drug_net, row_order=genes_list)
+drug_gene_adj = gene_drug_adj.transpose(copy=True)
 
 
 # data representation
@@ -214,7 +218,7 @@ flags.DEFINE_integer('batch_size', 512, 'minibatch size.')
 flags.DEFINE_boolean('bias', True, 'Bias term.')
 # Important -- Do not evaluate/print validation performance every iteration as it can take
 # substantial amount of time
-PRINT_PROGRESS_EVERY = 150
+PRINT_PROGRESS_EVERY = 50
 
 print("Defining placeholders")
 placeholders = construct_placeholders(edge_types)
