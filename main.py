@@ -142,13 +142,14 @@ drug_degrees_list = [np.array(drug_adj.sum(axis=0)).squeeze() for drug_adj in dr
 
 # Load drug-target data
 gene_drug_edgelist = pd.read_csv('data/bio-decagon-targets.csv')#.query('STITCH == @drugs_list').query('Gene == @genes_list')
+phantom_genes = [2842, 389208, 83886, 11223, 23430, 343066, 123624, 377677]  # These genes exist here but not in the gene-gene_net
+gene_drug_edgelist = gene_drug_edgelist.query('Gene not in @phantom_genes')
 gene_drug_net = nx.Graph()
 gene_drug_net.add_nodes_from(drugs_list, bipartite=0)
 gene_drug_net.add_nodes_from(gene_net.nodes, bipartite=1)
 gene_drug_net.add_edges_from(gene_drug_edgelist.to_numpy())
 gene_drug_adj = nx.algorithms.bipartite.matrix.biadjacency_matrix(gene_drug_net, row_order=genes_list)
 drug_gene_adj = gene_drug_adj.transpose(copy=True)
-
 
 # data representation
 adj_mats_orig = {
